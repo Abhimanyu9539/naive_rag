@@ -1,0 +1,14 @@
+langchain
+langchain-community
+langchain-core
+langchain-openai
+PyPDF2
+python-docx
+beautifulsoup4
+requests
+nltk
+tiktoken
+python-dotenv
+pandas
+numpy
+docx2txt
