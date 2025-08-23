@@ -1,15 +1,18 @@
 """
-Token-based chunker for splitting documents by token count.
+Token-based document chunker using LangChain's TokenTextSplitter.
 """
 
-import re
-from typing import List, Optional
+from typing import List
+import tiktoken
+
+from langchain_core.documents import Document
+from langchain_text_splitters import TokenTextSplitter
 
 from .base_chunker import BaseChunker
 
 
 class TokenChunker(BaseChunker):
-    """Chunker that splits documents based on token count."""
+    """Token-based document chunker using LangChain's TokenTextSplitter."""
     
     def __init__(self, 
                  max_tokens: int = 500,
@@ -19,169 +22,70 @@ class TokenChunker(BaseChunker):
         Initialize the token chunker.
         
         Args:
-            max_tokens: Maximum number of tokens per chunk
-            overlap_tokens: Number of overlapping tokens between chunks
-            tokenizer_name: Name of the tokenizer to use
+            max_tokens: Maximum tokens per chunk
+            overlap_tokens: Overlapping tokens between chunks
+            tokenizer_name: Tokenizer to use (default: cl100k_base for GPT models)
         """
-        super().__init__()
         self.max_tokens = max_tokens
         self.overlap_tokens = overlap_tokens
         self.tokenizer_name = tokenizer_name
-        self._tokenizer = None
+        self.tokenizer = tiktoken.get_encoding(tokenizer_name)
+        
+        # Call parent constructor after setting attributes
+        super().__init__(chunk_size=max_tokens, chunk_overlap=overlap_tokens)
     
-    @property
-    def tokenizer(self):
-        """Get or create the tokenizer."""
-        if self._tokenizer is None:
-            try:
-                import tiktoken
-                self._tokenizer = tiktoken.get_encoding(self.tokenizer_name)
-            except ImportError:
-                raise ImportError("tiktoken is required for token-based chunking. Install with: pip install tiktoken")
-        return self._tokenizer
+    def _create_text_splitter(self):
+        """Create a token-based text splitter."""
+        return TokenTextSplitter(
+            chunk_size=self.max_tokens,
+            chunk_overlap=self.overlap_tokens,
+            encoding_name=self.tokenizer_name
+        )
     
-    def chunk(self, text: str) -> List[str]:
+    def chunk_document(self, document: Document) -> List[Document]:
         """
-        Split text into chunks based on token count.
+        Chunk a document using token-based splitting.
         
         Args:
-            text: Text to split into chunks
+            document: LangChain Document to chunk
             
         Returns:
-            List of text chunks
+            List of chunked Document objects
         """
-        if not text.strip():
+        try:
+            # Use LangChain's text splitter to preserve metadata
+            chunks = self.text_splitter.split_documents([document])
+            
+            # Add chunk metadata
+            document_id = document.metadata.get('source', 'unknown')
+            chunks = self.add_chunk_metadata(chunks, document_id)
+            
+            return chunks
+            
+        except Exception as e:
+            print(f"Error chunking document: {e}")
             return []
-        
-        # Encode text to tokens
-        tokens = self.tokenizer.encode(text)
-        
-        if len(tokens) <= self.max_tokens:
-            return [text]
-        
-        chunks = []
-        start = 0
-        
-        while start < len(tokens):
-            # Calculate end position for this chunk
-            end = start + self.max_tokens
-            
-            # If this is not the last chunk, try to break at a sentence boundary
-            if end < len(tokens) and self.overlap_tokens > 0:
-                # Look for a good break point within the overlap region
-                break_point = self._find_break_point(tokens, start, end)
-                end = break_point
-            
-            # Extract tokens for this chunk
-            chunk_tokens = tokens[start:end]
-            chunk_text = self.tokenizer.decode(chunk_tokens)
-            
-            # Clean up the chunk text
-            chunk_text = self._clean_chunk_text(chunk_text)
-            
-            if chunk_text.strip():
-                chunks.append(chunk_text)
-            
-            # Move start position for next chunk
-            if end >= len(tokens):
-                break
-            
-            start = end - self.overlap_tokens
-            if start >= len(tokens):
-                break
-        
-        return chunks
     
-    def _find_break_point(self, tokens: List[int], start: int, end: int) -> int:
+    def get_token_count(self, text: str) -> int:
         """
-        Find a good break point within the overlap region.
+        Get the token count for a text using the configured tokenizer.
         
         Args:
-            tokens: List of token IDs
-            start: Start position of current chunk
-            end: End position of current chunk
+            text: Text to count tokens for
             
         Returns:
-            Optimal break point position
+            Number of tokens
         """
-        # Look for sentence endings in the overlap region
-        overlap_start = max(start, end - self.overlap_tokens)
-        
-        # Common sentence ending tokens (period, exclamation, question mark)
-        sentence_endings = ['.', '!', '?', '\n', '\n\n']
-        
-        # Convert tokens back to text to find sentence boundaries
-        overlap_text = self.tokenizer.decode(tokens[overlap_start:end])
-        
-        # Find the last sentence ending
-        for ending in sentence_endings:
-            if ending in overlap_text:
-                # Find the position of the last occurrence
-                last_pos = overlap_text.rfind(ending)
-                if last_pos > 0:
-                    # Convert character position back to token position
-                    char_count = 0
-                    for i, token in enumerate(tokens[overlap_start:end]):
-                        char_count += len(self.tokenizer.decode([token]))
-                        if char_count > last_pos:
-                            return overlap_start + i + 1
-        
-        # If no good break point found, use the original end
-        return end
+        return len(self.tokenizer.encode(text))
     
-    def _clean_chunk_text(self, text: str) -> str:
+    def get_chunk_token_counts(self, chunks: List[Document]) -> List[int]:
         """
-        Clean up chunk text by removing incomplete sentences at boundaries.
+        Get token counts for a list of chunks.
         
         Args:
-            text: Raw chunk text
+            chunks: List of chunked documents
             
         Returns:
-            Cleaned chunk text
+            List of token counts
         """
-        # Remove incomplete sentences at the beginning
-        text = re.sub(r'^[^.!?]*[.!?]\s*', '', text)
-        
-        # Remove incomplete sentences at the end
-        text = re.sub(r'\s*[^.!?]*$', '', text)
-        
-        return text.strip()
-    
-    def chunk_by_sentences(self, text: str, max_sentences: int = 10) -> List[str]:
-        """
-        Alternative chunking method based on sentence count.
-        
-        Args:
-            text: Text to split into chunks
-            max_sentences: Maximum number of sentences per chunk
-            
-        Returns:
-            List of text chunks
-        """
-        # Split text into sentences
-        sentences = re.split(r'(?<=[.!?])\s+', text)
-        
-        chunks = []
-        current_chunk = []
-        current_tokens = 0
-        
-        for sentence in sentences:
-            sentence_tokens = len(self.tokenizer.encode(sentence))
-            
-            # Check if adding this sentence would exceed limits
-            if (len(current_chunk) >= max_sentences or 
-                current_tokens + sentence_tokens > self.max_tokens):
-                
-                if current_chunk:
-                    chunks.append(' '.join(current_chunk))
-                    current_chunk = []
-                    current_tokens = 0
-            
-            current_chunk.append(sentence)
-            current_tokens += sentence_tokens
-        
-        # Add the last chunk if it exists
-        if current_chunk:
-            chunks.append(' '.join(current_chunk))
-        
-        return chunks
+        return [self.get_token_count(chunk.page_content) for chunk in chunks]

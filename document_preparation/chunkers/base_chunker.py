@@ -1,81 +1,98 @@
 """
-Base chunker class that defines the interface for document chunking.
+Base chunker interface using LangChain text splitters.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
-from ..utils import Document, Chunk
+from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 class BaseChunker(ABC):
-    """Abstract base class for document chunkers."""
+    """
+    Base interface for document chunkers using LangChain text splitters.
     
-    def __init__(self):
-        """Initialize the chunker."""
-        pass
+    This provides a consistent interface while leveraging LangChain's
+    native text splitting functionality.
+    """
+    
+    def __init__(self, chunk_size: int = 500, chunk_overlap: int = 50):
+        """
+        Initialize the base chunker.
+        
+        Args:
+            chunk_size: Maximum size of each chunk
+            chunk_overlap: Overlap between chunks
+        """
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
+        self.text_splitter = self._create_text_splitter()
     
     @abstractmethod
-    def chunk(self, text: str) -> List[str]:
-        """
-        Split text into chunks.
-        
-        Args:
-            text: Text to split into chunks
-            
-        Returns:
-            List of text chunks
-        """
+    def _create_text_splitter(self):
+        """Create the appropriate text splitter."""
         pass
     
-    def chunk_document(self, document: Document) -> List[Chunk]:
+    def chunk_document(self, document: Document) -> List[Document]:
         """
-        Split a document into chunks.
+        Chunk a single document.
         
         Args:
-            document: Document object to chunk
+            document: LangChain Document to chunk
             
         Returns:
-            List of Chunk objects
+            List of chunked Document objects
         """
-        text_chunks = self.chunk(document.content)
-        chunks = []
-        
-        current_index = 0
-        for i, chunk_text in enumerate(text_chunks):
-            chunk_id = f"{document.id}_chunk_{i:04d}"
+        try:
+            # Use LangChain's text splitter to preserve metadata
+            chunks = self.text_splitter.split_documents([document])
             
-            chunk = Chunk(
-                content=chunk_text,
-                document_id=document.id,
-                chunk_id=chunk_id,
-                start_index=current_index,
-                end_index=current_index + len(chunk_text),
-                metadata={
-                    'chunk_index': i,
-                    'total_chunks': len(text_chunks),
-                    'document_title': document.title,
-                    'document_source': document.source
-                }
-            )
-            chunks.append(chunk)
-            current_index += len(chunk_text) + 1  # +1 for potential separator
-        
-        return chunks
+            # Add chunk metadata
+            document_id = document.metadata.get('source', 'unknown')
+            chunks = self.add_chunk_metadata(chunks, document_id)
+            
+            return chunks
+            
+        except Exception as e:
+            print(f"Error chunking document: {e}")
+            return []
     
-    def chunk_documents(self, documents: List[Document]) -> List[Chunk]:
+    def chunk_documents(self, documents: List[Document]) -> List[Document]:
         """
-        Split multiple documents into chunks.
+        Chunk multiple documents.
         
         Args:
-            documents: List of Document objects to chunk
+            documents: List of LangChain Documents to chunk
             
         Returns:
-            List of Chunk objects from all documents
+            List of chunked Document objects
         """
         all_chunks = []
+        
         for document in documents:
             chunks = self.chunk_document(document)
             all_chunks.extend(chunks)
         
         return all_chunks
+    
+    def add_chunk_metadata(self, chunks: List[Document], document_id: str) -> List[Document]:
+        """
+        Add chunk-specific metadata to documents.
+        
+        Args:
+            chunks: List of chunked documents
+            document_id: ID of the source document
+            
+        Returns:
+            Updated documents with chunk metadata
+        """
+        for i, chunk in enumerate(chunks):
+            chunk.metadata.update({
+                'chunk_id': f"{document_id}_chunk_{i:04d}",
+                'chunk_index': i,
+                'total_chunks': len(chunks),
+                'source_document_id': document_id
+            })
+        
+        return chunks

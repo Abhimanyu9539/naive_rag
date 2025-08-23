@@ -1,74 +1,61 @@
 """
-Web page loader for HTML content using LangChain.
+Web document loader using LangChain's WebBaseLoader.
 """
 
-import os
-from pathlib import Path
 from typing import List
 from urllib.parse import urlparse
 
 from langchain_community.document_loaders import WebBaseLoader
+from langchain_core.documents import Document
 
-from .base_loader import BaseLoader
-from ..utils import Document
+from .base_loader import BaseDocumentLoader
 
 
-class WebLoader(BaseLoader):
-    """Loader for web pages using LangChain."""
+class WebDocumentLoader(BaseDocumentLoader):
+    """Loader for web documents using LangChain's WebBaseLoader."""
     
-    def __init__(self, encoding: str = 'utf-8', timeout: int = 10):
-        """
-        Initialize the web loader.
-        
-        Args:
-            encoding: Text encoding to use
-            timeout: Request timeout in seconds
-        """
-        super().__init__(encoding)
-        self.timeout = timeout
+    def __init__(self):
+        """Initialize the web loader."""
+        super().__init__()
+        # Web loader doesn't have file extensions, but we can check URLs
+        self.supported_extensions = set()
     
     def can_load(self, file_path: str) -> bool:
-        """Check if this loader can handle the given URL."""
-        # Check if it's a URL
-        parsed = urlparse(file_path)
-        return bool(parsed.scheme and parsed.netloc)
-    
-    def load(self, url: str) -> Document:
         """
-        Load a web page using LangChain's WebBaseLoader.
+        Check if this loader can handle the given URL.
         
         Args:
-            url: URL of the web page to load
+            file_path: URL to check
             
         Returns:
-            Document object containing the extracted text
+            True if the path is a valid URL
         """
-        if not self.can_load(url):
-            raise ValueError(f"Invalid URL: {url}")
+        try:
+            result = urlparse(file_path)
+            return all([result.scheme, result.netloc])
+        except:
+            return False
+    
+    def load(self, file_path: str) -> List[Document]:
+        """
+        Load documents from a web URL.
         
+        Args:
+            file_path: URL to load from
+            
+        Returns:
+            List of LangChain Document objects
+        """
         try:
             # Use LangChain's WebBaseLoader
-            langchain_loader = WebBaseLoader(
-                web_paths=[url],
-                requests_kwargs={'timeout': self.timeout}
-            )
-            langchain_docs = langchain_loader.load()
+            loader = WebBaseLoader(file_path)
+            documents = loader.load()
             
-            if not langchain_docs:
-                raise ValueError(f"No content loaded from {url}")
+            # Add metadata
+            documents = self.add_metadata(documents, file_path, file_type='web')
             
-            # Convert LangChain document to our format
-            document = self._convert_langchain_document(langchain_docs[0], url)
-            
-            # Add URL-specific metadata
-            url_metadata = {
-                'url': url,
-                'domain': urlparse(url).netloc,
-                'content_type': 'web_page'
-            }
-            document.metadata.update(url_metadata)
-            
-            return document
+            return documents
             
         except Exception as e:
-            raise ValueError(f"Error loading web page {url}: {e}")
+            print(f"Error loading web document {file_path}: {e}")
+            return []

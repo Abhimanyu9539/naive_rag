@@ -1,19 +1,19 @@
 """
-Document loaders for different file types using LangChain.
+Document loaders using LangChain components.
 """
 
-from .base_loader import BaseLoader
-from .pdf_loader import PDFLoader
-from .text_loader import TextLoader
-from .docx_loader import DocxLoader
-from .web_loader import WebLoader
+from .base_loader import BaseDocumentLoader
+from .text_loader import TextDocumentLoader
+from .pdf_loader import PDFDocumentLoader
+from .docx_loader import DocxDocumentLoader
+from .web_loader import WebDocumentLoader
 from .directory_loader import DirectoryDocumentLoader
 
 __all__ = [
-    "BaseLoader",
-    "PDFLoader", 
-    "TextLoader",
-    "DocxLoader",
-    "WebLoader",
-    "DirectoryDocumentLoader"
+    'BaseDocumentLoader',
+    'TextDocumentLoader',
+    'PDFDocumentLoader', 
+    'DocxDocumentLoader',
+    'WebDocumentLoader',
+    'DirectoryDocumentLoader'
 ]

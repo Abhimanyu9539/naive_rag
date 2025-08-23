@@ -1,27 +1,32 @@
 """
-Base preprocessor class that defines the interface for text preprocessing.
+Base preprocessor interface using LangChain components.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
-from ..utils import Document
+from langchain_core.documents import Document
 
 
 class BasePreprocessor(ABC):
-    """Abstract base class for text preprocessors."""
+    """
+    Base interface for document preprocessors using LangChain components.
+    
+    This provides a consistent interface for text cleaning and normalization
+    while working with LangChain's native Document class.
+    """
     
     def __init__(self):
-        """Initialize the preprocessor."""
+        """Initialize the base preprocessor."""
         pass
     
     @abstractmethod
-    def preprocess(self, text: str) -> str:
+    def preprocess_text(self, text: str) -> str:
         """
         Preprocess a single text string.
         
         Args:
-            text: Raw text to preprocess
+            text: Text to preprocess
             
         Returns:
             Preprocessed text
@@ -30,35 +35,43 @@ class BasePreprocessor(ABC):
     
     def preprocess_document(self, document: Document) -> Document:
         """
-        Preprocess a document.
+        Preprocess a single LangChain document.
         
         Args:
-            document: Document object to preprocess
+            document: LangChain Document to preprocess
             
         Returns:
-            Document with preprocessed content
+            Preprocessed Document
         """
-        preprocessed_content = self.preprocess(document.content)
-        
         # Create a new document with preprocessed content
-        return Document(
-            content=preprocessed_content,
-            source=document.source,
-            title=document.title,
-            author=document.author,
-            created_date=document.created_date,
-            modified_date=document.modified_date,
-            metadata=document.metadata
+        preprocessed_content = self.preprocess_text(document.page_content)
+        
+        # Create new document with preprocessed content and original metadata
+        preprocessed_doc = Document(
+            page_content=preprocessed_content,
+            metadata=document.metadata.copy()
         )
+        
+        # Add preprocessing metadata
+        preprocessed_doc.metadata['preprocessed'] = True
+        preprocessed_doc.metadata['preprocessor'] = self.__class__.__name__
+        
+        return preprocessed_doc
     
     def preprocess_documents(self, documents: List[Document]) -> List[Document]:
         """
-        Preprocess multiple documents.
+        Preprocess multiple LangChain documents.
         
         Args:
-            documents: List of Document objects to preprocess
+            documents: List of LangChain Documents to preprocess
             
         Returns:
-            List of Document objects with preprocessed content
+            List of preprocessed Documents
         """
-        return [self.preprocess_document(doc) for doc in documents]
+        preprocessed_docs = []
+        
+        for document in documents:
+            preprocessed_doc = self.preprocess_document(document)
+            preprocessed_docs.append(preprocessed_doc)
+        
+        return preprocessed_docs

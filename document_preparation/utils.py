@@ -1,73 +1,14 @@
 """
-Utility classes and functions for document preparation.
+Utility functions for document preparation using LangChain components.
 """
 
-from dataclasses import dataclass
-from typing import List, Optional, Dict, Any
 from pathlib import Path
+from typing import List, Optional, Dict, Any
 import hashlib
 from datetime import datetime
 
-
-@dataclass
-class Document:
-    """Represents a document with metadata and content."""
-    
-    content: str
-    source: str  # File path or URL
-    title: Optional[str] = None
-    author: Optional[str] = None
-    created_date: Optional[datetime] = None
-    modified_date: Optional[datetime] = None
-    metadata: Optional[Dict[str, Any]] = None
-    
-    def __post_init__(self):
-        if self.metadata is None:
-            self.metadata = {}
-        if self.title is None:
-            self.title = Path(self.source).stem if self.source else "Unknown"
-    
-    @property
-    def id(self) -> str:
-        """Generate a unique ID for the document."""
-        content_hash = hashlib.md5(self.content.encode()).hexdigest()
-        return f"{self.source}_{content_hash[:8]}"
-    
-    @property
-    def word_count(self) -> int:
-        """Get the word count of the document."""
-        return len(self.content.split())
-    
-    @property
-    def char_count(self) -> int:
-        """Get the character count of the document."""
-        return len(self.content)
-
-
-@dataclass
-class Chunk:
-    """Represents a chunk of text from a document."""
-    
-    content: str
-    document_id: str
-    chunk_id: str
-    start_index: int
-    end_index: int
-    metadata: Optional[Dict[str, Any]] = None
-    
-    def __post_init__(self):
-        if self.metadata is None:
-            self.metadata = {}
-    
-    @property
-    def word_count(self) -> int:
-        """Get the word count of the chunk."""
-        return len(self.content.split())
-    
-    @property
-    def char_count(self) -> int:
-        """Get the character count of the chunk."""
-        return len(self.content)
+# Use LangChain's native Document class instead of custom ones
+from langchain_core.documents import Document
 
 
 def get_file_extension(file_path: str) -> str:
@@ -76,8 +17,8 @@ def get_file_extension(file_path: str) -> str:
 
 
 def is_supported_file(file_path: str) -> bool:
-    """Check if the file type is supported."""
-    supported_extensions = {'.pdf', '.txt', '.docx', '.doc'}
+    """Check if the file type is supported by LangChain loaders."""
+    supported_extensions = {'.pdf', '.txt', '.docx', '.doc', '.md', '.html', '.htm', '.csv', '.json'}
     return get_file_extension(file_path) in supported_extensions
 
 
@@ -92,26 +33,52 @@ def sanitize_filename(filename: str) -> str:
 
 
 def create_chunk_id(document_id: str, chunk_index: int) -> str:
-    """Create a unique chunk ID."""
+    """Create a unique chunk ID for LangChain documents."""
     return f"{document_id}_chunk_{chunk_index:04d}"
 
 
-def merge_chunks(chunks: List[Chunk]) -> str:
-    """Merge multiple chunks back into a single text."""
-    return " ".join(chunk.content for chunk in chunks)
+def merge_chunks(chunks: List[Document]) -> str:
+    """Merge multiple LangChain document chunks back into a single text."""
+    return " ".join(chunk.page_content for chunk in chunks)
 
 
-def calculate_overlap_tokens(text1: str, text2: str, tokenizer) -> int:
-    """Calculate the number of overlapping tokens between two texts."""
-    tokens1 = tokenizer.encode(text1)
-    tokens2 = tokenizer.encode(text2)
+def add_metadata_to_document(doc: Document, **kwargs) -> Document:
+    """Add metadata to a LangChain document."""
+    doc.metadata.update(kwargs)
+    return doc
+
+
+def create_document_from_text(content: str, source: str, **metadata) -> Document:
+    """Create a LangChain Document from text content."""
+    doc_metadata = {
+        'source': source,
+        'created_date': datetime.now(),
+        **metadata
+    }
+    return Document(page_content=content, metadata=doc_metadata)
+
+
+def get_document_statistics(documents: List[Document]) -> Dict[str, Any]:
+    """Get statistics about a list of LangChain documents."""
+    if not documents:
+        return {}
     
-    # Find common tokens at the end of text1 and beginning of text2
-    min_len = min(len(tokens1), len(tokens2))
-    overlap = 0
+    total_docs = len(documents)
+    total_words = sum(len(doc.page_content.split()) for doc in documents)
+    total_chars = sum(len(doc.page_content) for doc in documents)
     
-    for i in range(1, min_len + 1):
-        if tokens1[-i:] == tokens2[:i]:
-            overlap = i
+    # Source analysis
+    sources = {}
+    for doc in documents:
+        source = doc.metadata.get('source', 'unknown')
+        sources[source] = sources.get(source, 0) + 1
     
-    return overlap
+    return {
+        'total_documents': total_docs,
+        'total_words': total_words,
+        'total_characters': total_chars,
+        'average_words_per_document': round(total_words / total_docs, 2) if total_docs > 0 else 0,
+        'average_characters_per_document': round(total_chars / total_docs, 2) if total_docs > 0 else 0,
+        'unique_sources': len(sources),
+        'source_distribution': sources
+    }

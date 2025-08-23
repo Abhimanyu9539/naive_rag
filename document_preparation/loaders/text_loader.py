@@ -1,19 +1,18 @@
 """
-Text file loader for plain text documents using LangChain.
+Text document loader using LangChain's TextLoader.
 """
 
-import os
-from pathlib import Path
 from typing import List
+from pathlib import Path
 
-from langchain_community.document_loaders import TextLoader as LangChainTextLoader
+from langchain_community.document_loaders import TextLoader
+from langchain_core.documents import Document
 
-from .base_loader import BaseLoader
-from ..utils import Document
+from .base_loader import BaseDocumentLoader
 
 
-class TextLoader(BaseLoader):
-    """Loader for plain text files using LangChain."""
+class TextDocumentLoader(BaseDocumentLoader):
+    """Loader for text files using LangChain's TextLoader."""
     
     def __init__(self, encoding: str = 'utf-8'):
         """
@@ -22,44 +21,30 @@ class TextLoader(BaseLoader):
         Args:
             encoding: Text encoding to use when reading files
         """
-        super().__init__(encoding)
+        super().__init__()
+        self.supported_extensions = {'.txt', '.md', '.rst', '.log'}
+        self.encoding = encoding
     
-    def can_load(self, file_path: str) -> bool:
-        """Check if this loader can handle the given file."""
-        return Path(file_path).suffix.lower() == '.txt'
-    
-    def load(self, file_path: str) -> Document:
+    def load(self, file_path: str) -> List[Document]:
         """
-        Load a text file using LangChain's TextLoader.
+        Load text documents from a file.
         
         Args:
             file_path: Path to the text file
             
         Returns:
-            Document object containing the text content
+            List of LangChain Document objects
         """
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"File not found: {file_path}")
-        
-        if not self.can_load(file_path):
-            raise ValueError(f"File {file_path} is not a supported text file")
-        
         try:
             # Use LangChain's TextLoader
-            langchain_loader = LangChainTextLoader(file_path, encoding=self.encoding)
-            langchain_docs = langchain_loader.load()
+            loader = TextLoader(file_path, encoding=self.encoding)
+            documents = loader.load()
             
-            if not langchain_docs:
-                raise ValueError(f"No content loaded from {file_path}")
+            # Add metadata
+            documents = self.add_metadata(documents, file_path, file_type='text')
             
-            # Convert LangChain document to our format
-            document = self._convert_langchain_document(langchain_docs[0], file_path)
-            
-            # Add file metadata
-            file_metadata = self._get_file_metadata(file_path)
-            document.metadata.update(file_metadata)
-            
-            return document
+            return documents
             
         except Exception as e:
-            raise ValueError(f"Error reading text file {file_path}: {e}")
+            print(f"Error loading text file {file_path}: {e}")
+            return []

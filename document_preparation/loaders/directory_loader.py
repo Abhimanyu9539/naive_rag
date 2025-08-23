@@ -1,146 +1,106 @@
 """
-Directory loader for handling multiple file types using LangChain.
+Directory document loader using LangChain's DirectoryLoader.
 """
 
-import os
+from typing import List, Optional, Dict, Any
 from pathlib import Path
-from typing import List, Optional
 
 from langchain_community.document_loaders import DirectoryLoader
-from langchain_community.document_loaders import TextLoader, PyPDFLoader, Docx2txtLoader
+from langchain_core.documents import Document
 
-from .base_loader import BaseLoader
-from ..utils import Document
+from .base_loader import BaseDocumentLoader
+from .text_loader import TextDocumentLoader
+from .pdf_loader import PDFDocumentLoader
+from .docx_loader import DocxDocumentLoader
+from .web_loader import WebDocumentLoader
 
 
-class DirectoryDocumentLoader(BaseLoader):
-    """Loader for directories with multiple file types using LangChain."""
+class DirectoryDocumentLoader(BaseDocumentLoader):
+    """Loader for directories using LangChain's DirectoryLoader."""
     
-    def __init__(self, encoding: str = 'utf-8'):
-        """
-        Initialize the directory loader.
+    def __init__(self):
+        """Initialize the directory loader."""
+        super().__init__()
+        self.supported_extensions = {'.txt', '.pdf', '.docx', '.doc', '.md', '.html', '.htm'}
         
-        Args:
-            encoding: Text encoding to use when reading files
-        """
-        super().__init__(encoding)
-        
-        # Define loaders for different file types
+        # Initialize individual loaders
         self.loaders = {
-            "**/*.txt": (TextLoader, {"encoding": encoding}),
-            "**/*.pdf": (PyPDFLoader, {}),
-            "**/*.docx": (Docx2txtLoader, {}),
-            "**/*.doc": (Docx2txtLoader, {})
+            'text': TextDocumentLoader(),
+            'pdf': PDFDocumentLoader(),
+            'docx': DocxDocumentLoader(),
+            'web': WebDocumentLoader()
         }
-    
-    def can_load(self, file_path: str) -> bool:
-        """Check if this loader can handle the given directory."""
-        return Path(file_path).is_dir()
-    
-    def load(self, directory_path: str) -> List[Document]:
-        """
-        Load all supported documents from a directory.
-        
-        Args:
-            directory_path: Path to the directory containing documents
-            
-        Returns:
-            List of Document objects
-        """
-        if not os.path.exists(directory_path):
-            raise FileNotFoundError(f"Directory not found: {directory_path}")
-        
-        if not self.can_load(directory_path):
-            raise ValueError(f"Path {directory_path} is not a directory")
-        
-        documents = []
-        
-        # Load documents using LangChain's DirectoryLoader for each file type
-        for glob_pattern, (loader_class, loader_kwargs) in self.loaders.items():
-            try:
-                langchain_loader = DirectoryLoader(
-                    directory_path,
-                    glob=glob_pattern,
-                    loader_cls=loader_class,
-                    loader_kwargs=loader_kwargs
-                )
-                langchain_docs = langchain_loader.load()
-                
-                # Convert LangChain documents to our format
-                for langchain_doc in langchain_docs:
-                    source = langchain_doc.metadata.get('source', 'unknown')
-                    document = self._convert_langchain_document(langchain_doc, source)
-                    
-                    # Add file metadata
-                    file_metadata = self._get_file_metadata(source)
-                    document.metadata.update(file_metadata)
-                    
-                    documents.append(document)
-                    
-            except Exception as e:
-                print(f"Error loading files with pattern {glob_pattern}: {e}")
-                continue
-        
-        return documents
     
     def load_with_filters(self, 
                          directory_path: str, 
                          file_types: Optional[List[str]] = None,
                          recursive: bool = True) -> List[Document]:
         """
-        Load documents with specific file type filters.
+        Load documents from a directory with file type filters.
         
         Args:
             directory_path: Path to the directory
-            file_types: List of file extensions to include (e.g., ['txt', 'pdf'])
-            recursive: Whether to search subdirectories recursively
+            file_types: List of file extensions to include (e.g., ['pdf', 'txt'])
+            recursive: Whether to search subdirectories
             
         Returns:
-            List of Document objects
+            List of LangChain Document objects
         """
-        if not os.path.exists(directory_path):
-            raise FileNotFoundError(f"Directory not found: {directory_path}")
+        try:
+            directory_path = Path(directory_path)
+            if not directory_path.exists():
+                raise FileNotFoundError(f"Directory not found: {directory_path}")
+            
+            # Create glob pattern based on file types
+            if file_types:
+                extensions = [f"*.{ext.lstrip('.')}" for ext in file_types]
+                glob_pattern = f"**/*.{{{','.join(extensions)}}}" if recursive else f"*.{{{','.join(extensions)}}}"
+            else:
+                glob_pattern = "**/*" if recursive else "*"
+            
+            # Use LangChain's DirectoryLoader with automatic loader selection
+            loader = DirectoryLoader(
+                str(directory_path),
+                glob=glob_pattern,
+                loader_cls=self._get_loader_for_extension,
+                show_progress=True,
+                use_multithreading=True
+            )
+            
+            documents = loader.load()
+            
+            # Add directory metadata
+            for doc in documents:
+                if 'directory' not in doc.metadata:
+                    doc.metadata['directory'] = str(directory_path)
+            
+            return documents
+            
+        except Exception as e:
+            print(f"Error loading directory {directory_path}: {e}")
+            return []
+    
+    def _get_loader_for_extension(self, file_path: str):
+        """Get the appropriate loader class for a file extension."""
+        extension = Path(file_path).suffix.lower()
         
-        documents = []
+        if extension in {'.txt', '.md', '.rst', '.log'}:
+            return TextDocumentLoader
+        elif extension == '.pdf':
+            return PDFDocumentLoader
+        elif extension in {'.docx', '.doc'}:
+            return DocxDocumentLoader
+        else:
+            return TextDocumentLoader  # Default fallback
+    
+    def load(self, file_path: str) -> List[Document]:
+        """
+        Load documents from a directory (alias for load_with_filters).
         
-        # Filter loaders based on file types
-        filtered_loaders = self.loaders
-        if file_types:
-            filtered_loaders = {}
-            for pattern, (loader_class, loader_kwargs) in self.loaders.items():
-                for file_type in file_types:
-                    if f"*.{file_type}" in pattern:
-                        filtered_loaders[pattern] = (loader_class, loader_kwargs)
-                        break
-        
-        # Load documents using filtered loaders
-        for glob_pattern, (loader_class, loader_kwargs) in filtered_loaders.items():
-            try:
-                # Adjust glob pattern for recursive/non-recursive search
-                if not recursive:
-                    glob_pattern = glob_pattern.replace("**/", "")
-                
-                langchain_loader = DirectoryLoader(
-                    directory_path,
-                    glob=glob_pattern,
-                    loader_cls=loader_class,
-                    loader_kwargs=loader_kwargs
-                )
-                langchain_docs = langchain_loader.load()
-                
-                # Convert LangChain documents to our format
-                for langchain_doc in langchain_docs:
-                    source = langchain_doc.metadata.get('source', 'unknown')
-                    document = self._convert_langchain_document(langchain_doc, source)
-                    
-                    # Add file metadata
-                    file_metadata = self._get_file_metadata(source)
-                    document.metadata.update(file_metadata)
-                    
-                    documents.append(document)
-                    
-            except Exception as e:
-                print(f"Error loading files with pattern {glob_pattern}: {e}")
-                continue
-        
-        return documents
+        Args:
+            file_path: Path to the directory
+            
+        Returns:
+            List of LangChain Document objects
+        """
+        return self.load_with_filters(file_path)
