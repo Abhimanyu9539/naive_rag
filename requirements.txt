@@ -12,3 +12,4 @@ python-dotenv
 pandas
 numpy
 docx2txt
+sentence-transformers
