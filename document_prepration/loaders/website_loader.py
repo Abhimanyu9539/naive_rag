@@ -5,7 +5,11 @@ This module contains the WebsiteLoader class, which is used to load content from
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_core.documents import Document
 from urllib.parse import urlparse
+import logging
 from typing import List, Optional
+
+# Configure logger for this module
+logger = logging.getLogger(__name__)
 
 class WebsiteLoader:
     """
@@ -19,12 +23,16 @@ class WebsiteLoader:
             url (str): URL of the website to load
             requests_kwargs (dict, optional): Additional arguments to pass to requests
         """
+        logger.info(f"Initializing WebsiteLoader for URL: {url}")
+        
         if not self._is_valid_url(url):
+            logger.error(f"Invalid URL format: {url}")
             raise ValueError(f"Invalid URL format: {url}")
         
         self.url = url
         self.requests_kwargs = requests_kwargs or {}
         self.loader = WebBaseLoader(url, requests_kwargs=self.requests_kwargs)
+        logger.info(f"WebsiteLoader initialized successfully for: {url}")
     
     def _is_valid_url(self, url: str) -> bool:
         """
@@ -38,8 +46,14 @@ class WebsiteLoader:
         """
         try:
             result = urlparse(url)
-            return all([result.scheme, result.netloc])
-        except:
+            is_valid = all([result.scheme, result.netloc])
+            if is_valid:
+                logger.debug(f"URL validation successful: {url}")
+            else:
+                logger.debug(f"URL validation failed: {url} - missing scheme or netloc")
+            return is_valid
+        except Exception as e:
+            logger.debug(f"URL validation failed: {url} - {str(e)}")
             return False
     
     def load(self) -> List[Document]:
@@ -49,10 +63,13 @@ class WebsiteLoader:
         Returns:
             List[Document]: List of Document objects from the website
         """
+        logger.info(f"Starting to load website: {self.url}")
         try:
             documents = self.loader.load()
+            logger.info(f"Successfully loaded website: {self.url}. Found {len(documents)} documents")
             return documents
         except Exception as e:
+            logger.error(f"Error loading website {self.url}: {str(e)}")
             raise Exception(f"Error loading website {self.url}: {str(e)}")
     
     def load_with_metadata(self, custom_metadata: Optional[dict] = None) -> List[Document]:
@@ -65,15 +82,19 @@ class WebsiteLoader:
         Returns:
             List[Document]: List of Document objects with metadata
         """
+        logger.info(f"Starting to load website with metadata: {self.url}")
         try:
             documents = self.loader.load()
             
             # Add custom metadata if provided
             if custom_metadata:
+                logger.info(f"Adding custom metadata to {len(documents)} documents")
                 for doc in documents:
                     doc.metadata.update(custom_metadata)
                     doc.metadata['source_url'] = self.url
             
+            logger.info(f"Successfully loaded website with metadata: {self.url}. Found {len(documents)} documents")
             return documents
         except Exception as e:
+            logger.error(f"Error loading website {self.url}: {str(e)}")
             raise Exception(f"Error loading website {self.url}: {str(e)}")
