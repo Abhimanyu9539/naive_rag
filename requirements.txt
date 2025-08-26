@@ -2,6 +2,8 @@ langchain
 langchain-community
 langchain-core
 langchain-openai
+langchain-pinecone
+pinecone-client
 PyPDF2
 python-docx
 beautifulsoup4
