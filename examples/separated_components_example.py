@@ -8,8 +8,12 @@ This script shows how to use the new modular structure where:
 """
 
 import os
+import sys
 import logging
 from dotenv import load_dotenv
+
+# Add parent directory to Python path to allow imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import document preparation components
 from document_prepration.loaders.txt_loader import TXTLoader
@@ -133,17 +137,17 @@ def demonstrate_separated_components():
         for i, doc in enumerate(similar_docs, 1):
             logger.info(f"  Result {i}: {doc.page_content[:80]}...")
         
-        # Search with scores
-        similar_docs_with_scores = vector_store_processor.search_similar_with_scores(
-            query=query,
-            embeddings=document_processor.embedder.embedder,
-            k=3,
-            namespace="separated-namespace"
-        )
+        # # Search with scores
+        # similar_docs_with_scores = vector_store_processor.search_similar_with_scores(
+        #     query=query,
+        #     embeddings=document_processor.embedder.embedder,
+        #     k=3,
+        #     namespace="separated-namespace"
+        # )
         
-        logger.info(f"Found {len(similar_docs_with_scores)} similar documents with scores:")
-        for i, (doc, score) in enumerate(similar_docs_with_scores, 1):
-            logger.info(f"  Result {i} (Score: {score:.4f}): {doc.page_content[:60]}...")
+        # logger.info(f"Found {len(similar_docs_with_scores)} similar documents with scores:")
+        # for i, (doc, score) in enumerate(similar_docs_with_scores, 1):
+        #     logger.info(f"  Result {i} (Score: {score:.4f}): {doc.page_content[:60]}...")
         
         # Step 7: Get index statistics
         logger.info("Step 7: Getting index statistics...")

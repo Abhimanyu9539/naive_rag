@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional, Union
 from langchain_pinecone import PineconeVectorStore
 from langchain_core.embeddings import Embeddings
 from langchain.schema import Document
-import pinecone
+from pinecone import Pinecone, ServerlessSpec
 
 logger = logging.getLogger(__name__)
 
@@ -46,16 +46,7 @@ class PineconeStore:
         self.index_name = index_name
         self.environment = environment or os.getenv("PINECONE_ENVIRONMENT")
         
-        # Initialize Pinecone
-        try:
-            pinecone.init(
-                api_key=os.getenv("PINECONE_API_KEY"),
-                environment=self.environment
-            )
-            logger.info(f"Pinecone initialized with index: {index_name}")
-        except Exception as e:
-            logger.error(f"Error initializing Pinecone: {str(e)}")
-            raise
+
     
     def create_index(self, dimension: int, metric: str = "cosine") -> bool:
         """
@@ -69,11 +60,19 @@ class PineconeStore:
             True if index was created successfully
         """
         try:
-            if self.index_name not in pinecone.list_indexes():
-                pinecone.create_index(
+            # Initialize Pinecone client
+            pc = Pinecone()
+            
+            # Check if index exists
+            if self.index_name not in pc.list_indexes().names():
+                pc.create_index(
                     name=self.index_name,
                     dimension=dimension,
-                    metric=metric
+                    metric=metric,
+                    spec=ServerlessSpec(
+                        cloud="aws",
+                        region="us-east-1"
+                    )
                 )
                 logger.info(f"Created Pinecone index: {self.index_name} with dimension {dimension}")
                 return True
@@ -233,8 +232,11 @@ class PineconeStore:
             True if index was deleted successfully
         """
         try:
-            if self.index_name in pinecone.list_indexes():
-                pinecone.delete_index(self.index_name)
+            # Initialize Pinecone client
+            pc = Pinecone()
+            
+            if self.index_name in pc.list_indexes().names():
+                pc.delete_index(self.index_name)
                 logger.info(f"Deleted Pinecone index: {self.index_name}")
                 return True
             else:
@@ -253,8 +255,11 @@ class PineconeStore:
             Dictionary containing index statistics
         """
         try:
-            if self.index_name in pinecone.list_indexes():
-                index = pinecone.Index(self.index_name)
+            # Initialize Pinecone client
+            pc = Pinecone()
+            
+            if self.index_name in pc.list_indexes().names():
+                index = pc.Index(self.index_name)
                 stats = index.describe_index_stats()
                 logger.info(f"Retrieved stats for index: {self.index_name}")
                 return stats
