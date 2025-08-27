@@ -72,12 +72,12 @@ class BaseEmbedder(ABC):
             logger.error(f"Error embedding texts: {str(e)}")
             raise
     
-    def embed_documents(self, documents: List[Document]) -> List[Dict[str, Any]]:
+    def embed_documents(self, documents: Union[List[Document], List[str]]) -> List[Dict[str, Any]]:
         """
         Embed a list of documents and return with metadata.
         
         Args:
-            documents: List of LangChain Document objects
+            documents: List of LangChain Document objects or text strings
             
         Returns:
             List of dictionaries containing embeddings and metadata
@@ -85,20 +85,27 @@ class BaseEmbedder(ABC):
         try:
             logger.debug(f"Embedding {len(documents)} documents")
             
-            # Extract text content from documents
-            texts = [doc.page_content for doc in documents]
+            # Check if documents are strings or Document objects
+            if documents and isinstance(documents[0], str):
+                # Handle case where strings are passed (from PineconeVectorStore)
+                texts = documents
+                metadatas = [{} for _ in documents]
+            else:
+                # Handle case where Document objects are passed
+                texts = [doc.page_content for doc in documents]
+                metadatas = [doc.metadata.copy() if doc.metadata else {} for doc in documents]
             
             # Get embeddings
             embeddings = self.embed_texts(texts)
             
             # Combine with metadata
             embedded_docs = []
-            for i, (doc, embedding) in enumerate(zip(documents, embeddings)):
+            for i, (text, embedding, metadata) in enumerate(zip(texts, embeddings, metadatas)):
                 embedded_doc = {
                     'id': f"doc_{i}",
-                    'text': doc.page_content,
+                    'text': text,
                     'embedding': embedding,
-                    'metadata': doc.metadata.copy() if doc.metadata else {}
+                    'metadata': metadata
                 }
                 embedded_docs.append(embedded_doc)
             

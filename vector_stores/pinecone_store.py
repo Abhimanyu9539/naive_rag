@@ -124,8 +124,12 @@ class PineconeStore:
         try:
             vector_store = self.get_vector_store(embeddings)
             
-            # Add documents to the vector store
-            vector_store.add_documents(documents, namespace=namespace)
+            # Extract texts and metadatas from documents
+            texts = [doc.page_content for doc in documents]
+            metadatas = [doc.metadata.copy() if doc.metadata else {} for doc in documents]
+            
+            # Add texts to the vector store (PineconeVectorStore will handle embedding)
+            vector_store.add_texts(texts, metadatas=metadatas, namespace=namespace)
             
             logger.info(f"Successfully added {len(documents)} documents to Pinecone index: {self.index_name}")
             return True
