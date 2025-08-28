@@ -1,6 +1,6 @@
 # Naive RAG Project
 
-A comprehensive RAG (Retrieval-Augmented Generation) system with modular components for document processing, embedding, vector storage, and retrieval.
+A comprehensive RAG (Retrieval-Augmented Generation) system with modular components for document processing, embedding, vector storage, retrieval, and generation.
 
 ## Project Overview
 
@@ -10,6 +10,7 @@ This project provides a complete RAG pipeline with the following components:
 - **Embeddings**: Multiple embedding strategies with factory pattern
 - **Vector Stores**: Vector database integration (Pinecone)
 - **Retrieval**: Advanced retrieval strategies for improved document search
+- **Generation**: Multiple generation strategies for response creation
 - **RAG Processor**: High-level orchestrator for the complete pipeline
 
 ## Project Structure
@@ -38,6 +39,14 @@ naive_rag/
 │       ├── rerank_retriever.py
 │       ├── time_aware_retriever.py
 │       └── ensemble_retriever.py
+├── generation/             # Response generation strategies
+│   ├── base_generator.py   # Base generator interface
+│   ├── generator_factory.py # Factory for creating generators
+│   └── strategies/         # Different generation strategies
+│       ├── simple_generator.py
+│       ├── contextual_generator.py
+│       ├── chain_of_thought_generator.py
+│       └── multi_agent_generator.py
 ├── examples/               # Usage examples
 ├── notebooks/              # Jupyter notebooks
 ├── data/                   # Data files
@@ -86,6 +95,9 @@ processor.process_documents(documents)
 
 # Search for similar documents
 results = processor.search_similar("What is machine learning?", k=5)
+
+# Complete RAG query with generation
+response = processor.query("What is machine learning?", k=5)
 ```
 
 ### Using Advanced Retrieval
@@ -98,6 +110,26 @@ from vector_stores.pinecone_store import PineconeStore
 # Set up components
 embeddings = EmbedderFactory.create_embedder("openai")
 vector_store = PineconeStore(index_name="my-index")
+```
+
+### Using Generation Strategies
+
+```python
+from generation import GeneratorFactory
+from langchain_openai import ChatOpenAI
+
+# Create language model
+llm = ChatOpenAI(model="gpt-3.5-turbo")
+
+# Create different generators
+simple_gen = GeneratorFactory.create_generator("simple", llm=llm)
+contextual_gen = GeneratorFactory.create_generator("contextual", llm=llm)
+cot_gen = GeneratorFactory.create_generator("chain_of_thought", llm=llm)
+multi_agent_gen = GeneratorFactory.create_generator("multi_agent", llm=llm)
+
+# Generate responses
+response = generator.generate(query, retrieved_documents)
+```
 
 # Create different retrieval strategies
 simple_retriever = RetrieverFactory.create_retriever(
